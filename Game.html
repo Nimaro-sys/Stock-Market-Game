@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulateur Bourse - Jeu</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #0d1117;
+      color: #f0f6fc;
+      margin: 0;
+      padding: 20px;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #ffd700;
+    }
+    .portfolio, .stocks, .chart-container, .log {
+      margin: 20px auto;
+      max-width: 600px;
+      background: #161b22;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+      border: 1px solid #30363d;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      color: #c9d1d9;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #30363d;
+      text-align: center;
+    }
+    button {
+      padding: 6px 12px;
+      background: linear-gradient(135deg, #1f6feb, #3b82f6);
+      border: none;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: linear-gradient(135deg, #3b82f6, #60a5fa);
+    }
+    .event {
+      text-align: center;
+      font-weight: bold;
+      color: #ff5555;
+      margin: 10px 0;
+    }
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    li {
+      margin: 8px 0;
+    }
+    .log {
+      color: #8b949e;
+      font-size: 0.9em;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎲 Jeu de Simulation Boursière</h1>
+
+  <div class="portfolio">
+    <h2>💼 Portefeuille</h2>
+    <p>Argent: <span id="money">1000</span> €</p>
+    <ul id="inventory"></ul>
+    <p><strong>Valeur totale: <span id="total-value">1000</span> €</strong></p>
+  </div>
+
+  <div class="stocks">
+    <h2>📈 Marché des actions</h2>
+    <div id="event" class="event"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Entreprise</th>
+          <th>Prix</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="stock-table"></tbody>
+    </table>
+  </div>
+
+  <div class="chart-container">
+    <h2>📊 Évolution du marché</h2>
+    <canvas id="priceChart"></canvas>
+  </div>
+
+  <div class="log">
+    <h2>📰 Journal des événements</h2>
+    <div id="log"></div>
+  </div>
+
+  <script>
+    const stocks = [
+      { name: "Bijoutif", price: 100, history: [] }, // Bijouterie
+      { name: "Fast & Fourchette", price: 150, history: [] }, // Restauration rapide
+      { name: "PixelBouffe", price: 200, history: [] }, // Jeux vidéo
+      { name: "Dés & Compagnie", price: 250, history: [] }, // Jeux de société
+      { name: "Livrez-Moi", price: 180, history: [] } // Livres
+    ];
+
+    const inventory = {};
+    let money = 1000;
+    let time = 0;
+    let logLines = [];
+
+    const chartData = {
+      labels: [],
+      datasets: stocks.map((stock, index) => ({
+        label: stock.name,
+        data: [],
+        borderColor: `hsl(${index * 70}, 70%, 70%)`,
+        backgroundColor: 'transparent',
+        tension: 0.3,
+        pointRadius: 0
+      }))
+    };
+
+    const chartConfig = {
+      type: 'line',
+      data: chartData,
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            labels: {
+              color: '#f0f6fc'
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Temps (s)',
+              color: '#f0f6fc'
+            },
+            ticks: {
+              color: '#c9d1d9'
+            }
+          },
+          y: {
+            title: {
+              display: true,
+              text: 'Prix (€)',
+              color: '#f0f6fc'
+            },
+            ticks: {
+              color: '#c9d1d9'
+            }
+          }
+        }
+      }
+    };
+
+    const priceChart = new Chart(
+      document.getElementById('priceChart'),
+      chartConfig
+    );
+
+    function logEvent(text) {
+      const log = document.getElementById("log");
+      logLines.unshift(`[${new Date().toLocaleTimeString()}] ${text}`);
+      log.innerHTML = logLines.slice(0, 20).join("<br>");
+    }
+
+    function updateUI() {
+      document.getElementById("money").textContent = money.toFixed(2);
+
+      const invList = document.getElementById("inventory");
+      invList.innerHTML = "";
+      let totalValue = money;
+      for (const stock of stocks) {
+        const quantity = inventory[stock.name] || 0;
+        if (quantity > 0) {
+          const li = document.createElement("li");
+          li.innerHTML = `${stock.name}: ${quantity} (→ <button onclick="sellStock('${stock.name}')">Vendre</button>)`;
+          invList.appendChild(li);
+        }
+        totalValue += quantity * stock.price;
+      }
+      document.getElementById("total-value").textContent = totalValue.toFixed(2);
+
+      const table = document.getElementById("stock-table");
+      table.innerHTML = "";
+      stocks.forEach((stock, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${stock.name}</td>
+          <td>${stock.price.toFixed(2)} €</td>
+          <td><button onclick="buyStock(${index})">Acheter</button></td>
+        `;
+        table.appendChild(row);
+      });
+    }
+
+    function buyStock(index) {
+      const stock = stocks[index];
+      if (money >= stock.price) {
+        money -= stock.price;
+        inventory[stock.name] = (inventory[stock.name] || 0) + 1;
+        logEvent(`Achat de 1 action de ${stock.name} pour ${stock.price.toFixed(2)} €`);
+        updateUI();
+      } else {
+        alert("Pas assez d'argent !");
+      }
+    }
+
+    window.sellStock = function(stockName) {
+      const stock = stocks.find(s => s.name === stockName);
+      if (inventory[stockName] > 0) {
+        money += stock.price;
+        inventory[stockName]--;
+        logEvent(`Vente de 1 action de ${stockName} pour ${stock.price.toFixed(2)} €`);
+        updateUI();
+      }
+    };
+
+    function triggerRandomEvent() {
+      const eventText = document.getElementById("event");
+      const chance = Math.random();
+      if (chance < 0.1) {
+        eventText.textContent = "💥 Crash boursier ! Toutes les actions chutent fortement !";
+        stocks.forEach(stock => stock.price *= 0.5);
+        logEvent("Crash boursier déclenché !");
+      } else if (chance < 0.2) {
+        eventText.textContent = "📈 Boom économique ! Toutes les actions grimpent !";
+        stocks.forEach(stock => stock.price *= 1.5);
+        logEvent("Boom économique en cours !");
+      } else if (chance < 0.3) {
+        const bonus = 200;
+        money += bonus;
+        eventText.textContent = `🎁 Prime surprise : +${bonus} € !`;
+        logEvent(`Réception d'une prime de ${bonus} € !`);
+      } else {
+        eventText.textContent = "";
+      }
+    }
+
+    function fluctuatePrices() {
+      time += 5;
+      chartData.labels.push(time + "s");
+
+      triggerRandomEvent();
+
+      stocks.forEach((stock, index) => {
+        const change = (Math.random() - 0.5) * 20;
+        stock.price = Math.max(1, stock.price + change);
+        stock.history.push(stock.price);
+        chartData.datasets[index].data.push(stock.price);
+      });
+
+      priceChart.update();
+      updateUI();
+    }
+
+    setInterval(fluctuatePrices, 5000);
+    updateUI();
+  </script>
+</body>
+</html>
